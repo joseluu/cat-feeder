@@ -26,4 +26,4 @@ The web interface also logs the IR detectors activity
 
 To avoid a stuck feed screw, the firmware does a reverse rotation first, then a forward rotation, this has proven reliable. When operating manually you need to explicitly reverse first.
 
-As programmed, it delivers 20g of dry cat food 4 times a day.
+As programmed, it delivers 20g of dry cat food 4 times a day (total of 80g).
