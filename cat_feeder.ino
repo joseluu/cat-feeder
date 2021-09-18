@@ -1,4 +1,67 @@
 /*
+ * pin connections (may need to be changed if you have a different board)
+ */
+
+const int pinDetector1 = 25;
+const int pinDetector2 = 26; 
+const int pinDetector3 = 35;
+
+int Pin1 = 13;//IN1 is connected to 13 
+int Pin2 = 12;//IN2 is connected to 12  
+int Pin3 = 14;//IN3 is connected to 14 
+int Pin4 = 27;//IN4 is connected to 27 
+
+String feedTimes[] ={"9:00:00", "13:00:00", "18:00:00", "23:00:00"};
+
+String catName = "<your cat name>";
+
+int feedQuantity = 2800;
+
+const char *ssid = "<ssid of your wifi AP>";
+const char *password = "<password of your wifi AP>";
+
+
+#define dnsAddress "feed-cat"
+
+
+#include <TimeLib.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+
+// Define NTP Client to get time
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+
+
+String buttonTitle1[] ={"Feed", "Reverse"};
+String buttonTitle2[] ={"Feed", "Reverse"};
+String argId[] ={"ccw", "cw"};
+
+WebServer server(80);
+
+#define MAX_LOG 100
+String logData[MAX_LOG];
+int logPtr=0;
+
+// utility function for digital clock display: prints leading 0
+String twoDigits(int digits){
+  if(digits < 10) {
+    String i = '0'+String(digits);
+    return i;
+  }
+  else {
+    return String(digits);
+  }
+}
+String getTimeNow(){
+  return String(hour())+":"+twoDigits(minute())+":"+twoDigits(second());
+}
+
+/*
  * Controlling 28BYJ-48 Stepper Motor over WiFi using ESP32   
  * usng 2 push buttons: CW and CCW
  * 
@@ -30,72 +93,7 @@
    All rights reserved.
 
 */
-
-const int pinDetector1 = 25;
-const int pinDetector2 = 26; 
-const int pinDetector3 = 35;
-
-int Pin1 = 13;//IN1 is connected to 13 
-int Pin2 = 12;//IN2 is connected to 12  
-int Pin3 = 14;//IN3 is connected to 14 
-int Pin4 = 27;//IN4 is connected to 27 
-
- 
-int pole1[] ={0,0,0,0, 0,1,1,1, 0};//pole1, 8 step values
-int pole2[] ={0,0,0,1, 1,1,0,0, 0};//pole2, 8 step values
-int pole3[] ={0,1,1,1, 0,0,0,0, 0};//pole3, 8 step values
-int pole4[] ={1,1,0,0, 0,0,0,1, 0};//pole4, 8 step values
-
-
-int poleStep = 0; 
 int  dirStatus = 0;// stores direction status 3= stop (do not change)
-
-
-String buttonTitle1[] ={"Feed", "Reverse"};
-String buttonTitle2[] ={"Feed", "Reverse"};
-String argId[] ={"ccw", "cw"};
-String feedTimes[] ={"9:00:00", "13:00:00", "18:00:00", "23:00:00"};
-
-String catName = "Satoshi";
-
-int feedQuantity = 2800;
-
-#include <TimeLib.h>
-#include <WiFi.h>
-#include <WiFiClient.h>
-#include <WebServer.h>
-#include <ESPmDNS.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
-
-// Define NTP Client to get time
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
-
-#define dnsAddress "feed-cat"
-
-const char *ssid = "freeboite2";
-const char *password = "123456789a";
-
-WebServer server(80);
-
-#define MAX_LOG 100
-String logData[MAX_LOG];
-int logPtr=0;
-
-// utility function for digital clock display: prints leading 0
-String twoDigits(int digits){
-  if(digits < 10) {
-    String i = '0'+String(digits);
-    return i;
-  }
-  else {
-    return String(digits);
-  }
-}
-String getTimeNow(){
-  return String(hour())+":"+twoDigits(minute())+":"+twoDigits(second());
-}
 
 void handleRoot() {
    String timeNow = getTimeNow();
@@ -333,6 +331,14 @@ void setup(void) {
     Serial.println("HTTP server started");
     addLog("Started " + getTimeNow());
 }//end of setup
+
+ 
+int pole1[] ={0,0,0,0, 0,1,1,1, 0};//pole1, 8 step values
+int pole2[] ={0,0,0,1, 1,1,0,0, 0};//pole2, 8 step values
+int pole3[] ={0,1,1,1, 0,0,0,0, 0};//pole3, 8 step values
+int pole4[] ={1,1,0,0, 0,0,0,1, 0};//pole4, 8 step values
+
+int poleStep = 0; 
 
 int feeds=0;
 bool bFeeding;
