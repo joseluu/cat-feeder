@@ -17,3 +17,4 @@ Connects to a stepper motor as specified in the original project using the contr
 <img src="https://raw.githubusercontent.com/joseluu/cat-feeder/master/Documents/Photos/feeder_stepper_board.jpg" width="200">
 
 
+The MCU control board also monitors 3 infrared detectors for tracking the cat or the environment, someday these will feed the house automation MQTT
