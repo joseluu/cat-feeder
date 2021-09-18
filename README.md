@@ -24,4 +24,6 @@ The MCU publishes a web interface on the local network using mDNS at address: ht
 The web interface allows to manually operate the motor (hence feed the cat)
 The web interface also logs the IR detectors activity
 
-To avoid a stuck feed screw, the firmware does a reverse rotationn first, then a forward rotation, this has proven reliable.
+To avoid a stuck feed screw, the firmware does a reverse rotation first, then a forward rotation, this has proven reliable. When operating manually you need to explicitly reverse first.
+
+As programmed, it delivers 20g of dry cat food 4 times a day.
