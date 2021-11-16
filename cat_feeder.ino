@@ -11,23 +11,27 @@ int Pin2 = 12;//IN2 is connected to 12
 int Pin3 = 14;//IN3 is connected to 14 
 int Pin4 = 27;//IN4 is connected to 27 
 
-String feedTimes[] ={"9:00:00", "13:00:00", "18:00:00", "23:00:00"};
+//String feedTimes[] ={"9:00:00", "13:00:00", "18:00:00", "23:00:00"};
+String feedTimes[] ={"4:00:00", "9:00:00", "13:00:00", "18:00:00", "23:00:00"};
 
-String catName = "<your cat name>";
+String catName = "Satoshi";
 
 int feedQuantity = 2800;
 
-const char *ssid = "<ssid of your wifi AP>";
-const char *password = "<password of your wifi AP>";
-
+// Place for your network credentials
+#include "network_creds.h"
+//const char* ssid     = "wifi_name";
+//const char* password = "wifi_passwd";
 
 #define dnsAddress "feed-cat"
 
-
+#include <SSD1306Wire.h>
 #include <TimeLib.h>
+#include <Timezone.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
+#define CONFIG_MDNS_STRICT_MODE y
 #include <ESPmDNS.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -46,6 +50,14 @@ WebServer server(80);
 #define MAX_LOG 100
 String logData[MAX_LOG];
 int logPtr=0;
+
+#define D3 4
+#define D5 15
+// Initialize the OLED display using Wire library
+SSD1306Wire  oled(0x3c, D3, D5);
+bool wifiIsConnected=false;
+
+
 
 // utility function for digital clock display: prints leading 0
 String twoDigits(int digits){
@@ -103,7 +115,7 @@ void handleRoot() {
   <head>\
     <title>Cat feeder Control</title>\
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
-    <meta http-equiv=\"refresh\" content=\"5; url=http://" dnsAddress "/\">\
+    <meta http-equiv=\"refresh\" content=\"10\">\
     <style>\
       html,body{  \
       width:100%;\
@@ -227,24 +239,44 @@ void resetLogData(){
   }
 }
 
+void oledSetup(void) {
+  // reset OLED
+  pinMode(16,OUTPUT); 
+  digitalWrite(16,LOW); 
+  delay(50); 
+  digitalWrite(16,HIGH); 
+  
+  oled.init();
+  oled.clear();
+  oled.flipScreenVertically();
+  oled.setFont(ArialMT_Plain_10);
+  oled.setTextAlignment(TEXT_ALIGN_LEFT);
+  oled.drawString(0 , 0, "START" );
+  oled.display();
+}
+
+void displayPoint(int at,OLEDDISPLAY_COLOR color) {
+    oled.setColor(color);
+    oled.fillRect(at, 20, 1, 1 );
+}
+
 void timeSetup(void) {
-  String formattedDate;
+  String formattedTime;
   String dayStamp;
   String timeStamp;
   timeClient.begin();
-  timeClient.setTimeOffset(7200); // 3600 winter time
   while(!timeClient.update()) {
     timeClient.forceUpdate();
   }
-  formattedDate = timeClient.getFormattedTime();
-  // Extract date
-  int splitT = formattedDate.indexOf("T");
-  dayStamp = formattedDate.substring(0, splitT);
-  Serial.println(dayStamp);
-  // Extract time
-  timeStamp = formattedDate.substring(splitT+1, formattedDate.length()-1);
-  Serial.println(timeStamp);
-  setTime(timeClient.getEpochTime());
+  formattedTime = timeClient.getFormattedTime();
+  Serial.println(formattedTime);
+
+    // Central European Time Zone (Paris)
+  TimeChangeRule winterRule = {"CET", Last, Sun, Oct, 2, +60};    //Winter time = UTC + 1 hours
+  TimeChangeRule summerRule = {"CST", Last, Sun, Mar, 2, +120};  //Summer time = UTC + 2 hours
+  Timezone CET(summerRule,winterRule);
+  
+  setTime(CET.toLocal(timeClient.getEpochTime()));
   //setSyncProvider((long(*)())timeClient.getEpochTime());
 }
 
@@ -278,7 +310,54 @@ void detectorTrigger_3(){
   }
 }
 
+void displaySignalLevel() {
 
+    oled.setFont(ArialMT_Plain_10);
+    oled.setTextAlignment(TEXT_ALIGN_LEFT);
+    char levelStr[30];
+    sprintf(levelStr,"@%hhddb",WiFi.RSSI());
+    //Serial.println(levelStr);
+    oled.setColor(BLACK);
+    oled.fillRect(90,10,30,10);
+    oled.setColor(WHITE);
+    oled.drawString(90,10,levelStr);
+    oled.display();
+}
+bool doWifiWait(){
+      // Wait for connection
+    unsigned int count=0;
+    for (int i=0;i<128;i++) {
+      displayPoint(count,BLACK);
+    }
+    Serial.println("");
+    Serial.print("trying to connect to:");
+    Serial.print(ssid);
+    Serial.print(" ");
+    Serial.print(password);
+    Serial.println("");
+    while (WiFi.status() != WL_CONNECTED && count < 128) {
+        delay(500);
+        Serial.print(".");
+        displayPoint(count,WHITE);
+        oled.display();
+        count ++;
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+      return false;
+    }
+    Serial.println("");
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: http://");
+    Serial.print(WiFi.localIP());
+    oled.setColor(BLACK);
+    oled.fillRect(0,20,128,1);
+    oled.setColor(WHITE);
+    oled.drawString(0,10,WiFi.localIP().toString());
+    displaySignalLevel();
+    return true;
+}
 void detectorSetup(){
   pinMode(pinDetector1,INPUT);
   pinMode(pinDetector2,INPUT);
@@ -289,6 +368,7 @@ void detectorSetup(){
 }
 void setup(void) {
 
+    oledSetup();
     detectorSetup();
     
     pinMode(Pin1, OUTPUT);//define pin for ULN2003 in1 
@@ -304,18 +384,11 @@ void setup(void) {
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
     Serial.println("");
-    
-    // Wait for connection
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(ssid);
-    Serial.print("IP address: http://");
-    Serial.println(WiFi.localIP());
+    String macStr=WiFi.macAddress();
+    oled.drawString(36,0,macStr);
+    wifiIsConnected=doWifiWait();
+    if (!wifiIsConnected)
+        esp_restart();
 
 //multicast DNS   
     if (MDNS.begin(dnsAddress)) {
@@ -332,6 +405,16 @@ void setup(void) {
     addLog("Started " + getTimeNow());
 }//end of setup
 
+void drawTime(){
+  String timenow = String(hour())+":"+twoDigits(minute())+":"+twoDigits(second());
+  oled.setTextAlignment(TEXT_ALIGN_CENTER);
+  oled.setFont(ArialMT_Plain_24);
+  oled.setColor(BLACK);
+  oled.fillRect(0,40,128,24);
+  oled.setColor(WHITE);
+  oled.drawString(64 , 40, timenow );
+}
+
  
 int pole1[] ={0,0,0,0, 0,1,1,1, 0};//pole1, 8 step values
 int pole2[] ={0,0,0,1, 1,1,0,0, 0};//pole2, 8 step values
@@ -344,6 +427,8 @@ int feeds=0;
 bool bFeeding;
 void loop(void) {
   server.handleClient();
+  displaySignalLevel();
+  drawTime();
   if (dirStatus == 0) {
     driveStepper(8);   
   
