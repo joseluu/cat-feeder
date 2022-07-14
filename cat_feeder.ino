@@ -1,4 +1,4 @@
-/*
+ /*
  * pin connections (may need to be changed if you have a different board)
  */
 
@@ -6,17 +6,19 @@ const int pinDetector1 = 25;
 const int pinDetector2 = 26; 
 const int pinDetector3 = 35;
 
-int Pin1 = 13;//IN1 is connected to 13 
-int Pin2 = 12;//IN2 is connected to 12  
-int Pin3 = 14;//IN3 is connected to 14 
-int Pin4 = 27;//IN4 is connected to 27 
+static const int servoPin = 13;
+#define ZERO 90
+#define REVERSE 0
+#define FORWARD 180
 
-//String feedTimes[] ={"9:00:00", "13:00:00", "18:00:00", "23:00:00"};
-String feedTimes[] ={"4:00:00", "9:00:00", "13:00:00", "18:00:00", "23:00:00"};
+
+String feedTimes[] ={"6:00:00", "14:00:00", "22:00:00"};
+//String feedTimes[] ={"4:00:00", "9:00:00", "13:00:00", "18:00:00", "21:59:00"};
+
+int feedQuantity = 800;
 
 String catName = "Satoshi";
 
-int feedQuantity = 2800;
 
 // Place for your network credentials
 #include "network_creds.h"
@@ -25,6 +27,7 @@ int feedQuantity = 2800;
 
 #define dnsAddress "feed-cat"
 
+#include <Servo.h>
 #include <SSD1306Wire.h>
 #include <TimeLib.h>
 #include <Timezone.h>
@@ -33,6 +36,7 @@ int feedQuantity = 2800;
 #include <WebServer.h>
 #define CONFIG_MDNS_STRICT_MODE y
 #include <ESPmDNS.h>
+#include <ArduinoOTA.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
@@ -40,6 +44,19 @@ int feedQuantity = 2800;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
 
+
+
+Servo servo1;
+
+void doServo(int position){
+  static int previousServoPosition=0;
+  servo1.write(position);
+  if (position != previousServoPosition) {
+       Serial.print("servoPosition: ");
+       Serial.println(position);
+       previousServoPosition = position;
+  }
+}
 
 String buttonTitle1[] ={"Feed", "Reverse"};
 String buttonTitle2[] ={"Feed", "Reverse"};
@@ -73,38 +90,6 @@ String getTimeNow(){
   return String(hour())+":"+twoDigits(minute())+":"+twoDigits(second());
 }
 
-/*
- * Controlling 28BYJ-48 Stepper Motor over WiFi using ESP32   
- * usng 2 push buttons: CW and CCW
- * 
- * Watch Video instrution for this code:https://youtu.be/n2oeT6RcU5Q
- * 
- * Full explanation of this code and wiring diagram is available at
- * my Arduino Course at Udemy.com here: http://robojax.com/L/?id=62
-
- * Written by Ahmad Shamshiri on April 19, 2020 at 17:58
- * in Ajax, Ontario, Canada. www.robojax.com
- * 
-
- *  * This code is "AS IS" without warranty or liability. Free to be used as long as you keep this note intact.* 
- * This code has been download from Robojax.com
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-   Copyright (c) 2015, Majenko Technologies
-   All rights reserved.
-
-*/
 int  dirStatus = 0;// stores direction status 3= stop (do not change)
 
 void handleRoot() {
@@ -115,7 +100,7 @@ void handleRoot() {
   <head>\
     <title>Cat feeder Control</title>\
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
-    <meta http-equiv=\"refresh\" content=\"10\">\
+    <meta http-equiv=\"refresh\" content=\"10; URL='http://" + server.hostHeader() + "/'\"/=>\
     <style>\
       html,body{  \
       width:100%;\
@@ -238,6 +223,61 @@ void resetLogData(){
     logData[i]="";
   }
 }
+
+void OTAdelay(int ms) {
+  uint32_t moment = millis();
+  while (millis() - moment < ms) {
+    ArduinoOTA.handle();
+    yield();
+  }
+}
+void setupOTA() {
+  // Port defaults to 3232
+  // ArduinoOTA.setPort(3232);
+
+  // Hostname defaults to esp3232-[MAC]
+  ArduinoOTA.setHostname(dnsAddress);
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA
+    .onStart([]() {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH)
+        type = "sketch";
+      else // U_SPIFFS
+        type = "filesystem";
+
+      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+      Serial.println("Start updating " + type);
+    })
+    .onEnd([]() {
+      Serial.println("\nEnd");
+    })
+    .onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    })
+    .onError([](ota_error_t error) {
+      Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    });
+
+  ArduinoOTA.begin();
+
+  Serial.println("Ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
 
 void oledSetup(void) {
   // reset OLED
@@ -366,18 +406,19 @@ void detectorSetup(){
   attachInterrupt(pinDetector2, detectorTrigger_2, RISING);
   attachInterrupt(pinDetector3, detectorTrigger_3, RISING);
 }
+void servoSetup(){
+    servo1.attach(servoPin);
+    doServo(ZERO);
+}
 void setup(void) {
 
     oledSetup();
     detectorSetup();
+    servoSetup();
     
-    pinMode(Pin1, OUTPUT);//define pin for ULN2003 in1 
-    pinMode(Pin2, OUTPUT);//define pin for ULN2003 in2   
-    pinMode(Pin3, OUTPUT);//define pin for ULN2003 in3   
-    pinMode(Pin4, OUTPUT);//define pin for ULN2003 in4   
-    
+
     Serial.begin(115200);//initialize the serial monitor
-    Serial.println("cat feeder based on Robojax 28BYJ-48 Stepper Motor Control");
+    Serial.println("cat feeder based on continuous modded servo motor");
 
     resetLogData();
     
@@ -390,13 +431,9 @@ void setup(void) {
     if (!wifiIsConnected)
         esp_restart();
 
-//multicast DNS   
-    if (MDNS.begin(dnsAddress)) {
-        Serial.println("MDNS responder started");
-        Serial.println("access via http://" dnsAddress);
-    }
+
     timeSetup();
-    
+    setupOTA();
     server.on("/", handleRoot);
     server.on("/motor", HTTP_GET, motorControl);           
     server.onNotFound(handleNotFound);
@@ -415,14 +452,6 @@ void drawTime(){
   oled.drawString(64 , 40, timenow );
 }
 
- 
-int pole1[] ={0,0,0,0, 0,1,1,1, 0};//pole1, 8 step values
-int pole2[] ={0,0,0,1, 1,1,0,0, 0};//pole2, 8 step values
-int pole3[] ={0,1,1,1, 0,0,0,0, 0};//pole3, 8 step values
-int pole4[] ={1,1,0,0, 0,0,0,1, 0};//pole4, 8 step values
-
-int poleStep = 0; 
-
 int feeds=0;
 bool bFeeding;
 void loop(void) {
@@ -430,8 +459,7 @@ void loop(void) {
   displaySignalLevel();
   drawTime();
   if (dirStatus == 0) {
-    driveStepper(8);   
-  
+    doServo(ZERO);
     if (!bFeeding) {
       for (int i=0; i<sizeof(feedTimes)/sizeof(String); i++) {
         if (getTimeNow().compareTo(feedTimes[i])==0){
@@ -445,62 +473,40 @@ void loop(void) {
       bFeeding=false;
     }
   } else if(dirStatus >0 ){ 
-    dirStatus --;
-    poleStep++; 
-    driveStepper(poleStep);    
+    dirStatus --; 
   }else if(dirStatus <0){ 
     dirStatus ++;
-    poleStep--; 
-    driveStepper(poleStep);    
   }
-  if(poleStep>7){ 
-    poleStep=0; 
-  } 
-  if(poleStep<0){ 
-    poleStep=7; 
-  } 
-  delay(1);
-  //Robojax.com 28BYJ-48 Steper Motor Control
+  OTAdelay(1);
 }//end of loop
 
 void doFeed(String reason, int bReverse){
    if (bReverse) {
        addLog(reason + " feed at " + getTimeNow());
-       dirStatus = - feedQuantity;// CW 
+       dirStatus = - 50;// CW quantity is reduced, this is to clear any jam in the mechanism
+       doServo(REVERSE);
    } else {
       dirStatus = feedQuantity;// CCW 
+      doServo(FORWARD);
    }
-
 }
 
 void motorControl() {
     if(server.arg(argId[0]) == "on") {
-       addLog("Manual feed at " + getTimeNow());
-       dirStatus = feedQuantity;// CCW 
+       feeds ++;
+       doFeed("Manual ("+String(feeds)+")", true); // reverse first
+       bFeeding=true;
     }else if(server.arg(argId[0]) == "off"){
       dirStatus = 0;  // motor OFF        
     }else if(server.arg(argId[1]) == "on"){
-      dirStatus = -feedQuantity;  // CW          
+      doFeed("Manual reverse at " + getTimeNow(),true);       
     }else if(server.arg(argId[1]) == "off"){
       dirStatus = 0;  // motor OFF        
     }  
   handleRoot();
-}//motorControl end
+}
 
 
 
-/*
- * @brief sends signal to the motor
- * @param "c" is integer representing the pol of motor
- * @return does not return anything
- * 
- * www.Robojax.com code June 2019
- */
-void driveStepper(int c)
-{
-     digitalWrite(Pin1, pole1[c]);  
-     digitalWrite(Pin2, pole2[c]); 
-     digitalWrite(Pin3, pole3[c]); 
-     digitalWrite(Pin4, pole4[c]);   
-}//driveStepper end here
+
  
