@@ -7,15 +7,16 @@ const int pinDetector2 = 26;
 const int pinDetector3 = 35;
 
 static const int servoPin = 13;
-#define ZERO 90
+#define ZERO 91
 #define REVERSE 0
 #define FORWARD 180
 
 
 String feedTimes[] ={"6:00:00", "14:00:00", "22:00:00"};
-//String feedTimes[] ={"4:00:00", "9:00:00", "13:00:00", "18:00:00", "21:59:00"};
+//String feedTimes[] ={"4:00:00", "9:00:00", "13:00:00", "18:00:1", "21:59:00"};
 
-int feedQuantity = 800;
+int feedQuantity = 300;
+#define REVERSE_QUANTITY 50
 
 String catName = "Satoshi";
 
@@ -95,6 +96,9 @@ int  dirStatus = 0;// stores direction status 3= stop (do not change)
 void handleRoot() {
    String timeNow = getTimeNow();
    //Robojax.com ESP32 Relay Motor Control
+   if (!server.authenticate(http_username, http_password)) {
+        return server.requestAuthentication();
+   }
  String HTML ="<!DOCTYPE html>\
   <html>\
   <head>\
@@ -226,6 +230,7 @@ void resetLogData(){
 
 void OTAdelay(int ms) {
   uint32_t moment = millis();
+  ArduinoOTA.handle();
   while (millis() - moment < ms) {
     ArduinoOTA.handle();
     yield();
@@ -435,7 +440,7 @@ void setup(void) {
     timeSetup();
     setupOTA();
     server.on("/", handleRoot);
-    server.on("/motor", HTTP_GET, motorControl);           
+    server.on("/motor", HTTP_GET, handleMotorControl);           
     server.onNotFound(handleNotFound);
     server.begin();
     Serial.println("HTTP server started");
@@ -455,55 +460,74 @@ void drawTime(){
 int feeds=0;
 bool bFeeding;
 void loop(void) {
-  server.handleClient();
-  displaySignalLevel();
-  drawTime();
-  if (dirStatus == 0) {
-    doServo(ZERO);
-    if (!bFeeding) {
-      for (int i=0; i<sizeof(feedTimes)/sizeof(String); i++) {
-        if (getTimeNow().compareTo(feedTimes[i])==0){
-          feeds ++;
-          doFeed("Auto ("+String(feeds)+")", true); // reverse first
-          bFeeding=true;
+    server.handleClient();
+    displaySignalLevel();
+    drawTime();
+    if (dirStatus == 0) {
+        doServo(ZERO);
+        if (!bFeeding) {
+            for (int i=0; i<sizeof(feedTimes)/sizeof(String); i++) {
+                if (getTimeNow().compareTo(feedTimes[i])==0){
+                    feeds ++;
+                    doFeed("Auto ("+String(feeds)+")", true); // reverse
+                    bFeeding=true;
+                }
+            }
+        } else {
+            doFeed("Auto ("+String(feeds)+")", false);
+            bFeeding=false;
         }
-      }
-    } else {
-      doFeed("Auto ("+String(feeds)+")", false);
-      bFeeding=false;
+    } else if(dirStatus >0 ){ 
+        dirStatus --; 
+        if (dirStatus == 0) 
+             addLog("zero " + getTimeNow());
+    }else if(dirStatus <0){ 
+        dirStatus ++;
+        if (dirStatus == 0) 
+             addLog("zero " + getTimeNow());
     }
-  } else if(dirStatus >0 ){ 
-    dirStatus --; 
-  }else if(dirStatus <0){ 
-    dirStatus ++;
-  }
-  OTAdelay(1);
+    OTAdelay(2);
 }//end of loop
 
 void doFeed(String reason, int bReverse){
+  doFeedInternal(reason, bReverse,0);
+}
+
+void doFeedInternal(String reason, int bReverse, int quantity){
+   int actual_quantity;
    if (bReverse) {
-       addLog(reason + " feed at " + getTimeNow());
-       dirStatus = - 50;// CW quantity is reduced, this is to clear any jam in the mechanism
+       if (quantity == 0) {
+          actual_quantity = REVERSE_QUANTITY;
+       } else {
+          actual_quantity = quantity;
+       }
+       addLog(reason + " -feed at " + getTimeNow());
+       dirStatus = -actual_quantity;
        doServo(REVERSE);
    } else {
-      dirStatus = feedQuantity;// CCW 
+       if (quantity == 0) {
+          actual_quantity = feedQuantity;
+       } else {
+          actual_quantity = quantity;
+       }
+      addLog(reason + " +feed at " + getTimeNow());
+      dirStatus = actual_quantity;// CCW 
       doServo(FORWARD);
    }
 }
 
-void motorControl() {
+void handleMotorControl() {
     if(server.arg(argId[0]) == "on") {
-       feeds ++;
-       doFeed("Manual ("+String(feeds)+")", true); // reverse first
-       bFeeding=true;
+        feeds ++;
+        doFeedInternal("Manual ("+String(feeds)+")", false,1000);
     }else if(server.arg(argId[0]) == "off"){
-      dirStatus = 0;  // motor OFF        
+        dirStatus = 0;  // motor OFF        
     }else if(server.arg(argId[1]) == "on"){
-      doFeed("Manual reverse at " + getTimeNow(),true);       
+        doFeedInternal("Manual reverse at " + getTimeNow(),true,50);
     }else if(server.arg(argId[1]) == "off"){
-      dirStatus = 0;  // motor OFF        
+        dirStatus = 0;  // motor OFF        
     }  
-  handleRoot();
+    handleRoot();
 }
 
 
